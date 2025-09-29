@@ -1,6 +1,6 @@
 import { serve } from "@hono/node-server";
 import { serveStatic } from "@hono/node-server/serve-static";
-import { and, count, eq, ilike, asc, like } from "drizzle-orm";
+import { and, count, eq, ilike, asc, like, arrayContains} from "drizzle-orm";
 import { Hono } from "hono";
 import { html } from "hono/html";
 import { db } from "./db.js";
@@ -29,20 +29,58 @@ export const start_server = () => {
   app.get("/public/*", serveStatic({ root: "./" }));
 
   app.get("/", async (c) => {
+    //call database to get products (video minute 12 shows how to get objects from a query)
+    const page = Number(c.req.query("page")) || 1;
+    
+
+    const query = c.req.query("query") || "";
+
+    const allProducts = await db.select().from(product).where(like(product.name, "%"+query+"%")).all();
+
+
+    const numProducts = allProducts.length;
 
     return c.html(
-      generateHTML()
+      generateHTML(
+        {
+          title: "Store",
+          products: allProducts.slice((page-1)*10, page*10),
+          paginationLinks: searchPagination(Math.ceil(numProducts/10), page, query),
+          status: "",
+          query: "",
+        }
+      )
     );
   });
 
   // Delete a product
   app.post("/delete", async (c) => {
     const body = await c.req.parseBody();
+    const productID = body.productID;
+
+    await db.delete(product).where(eq(product.id, Number(productID)));
+
+    return c.redirect('/');
   });
 
   // Create a new product
   app.post("/add", async (c) => {
     const body = await c.req.parseBody();
+
+    const productName = body.name;
+    const image_url = body.image_url;
+
+    console.log(productName);
+    console.log(image_url);
+    
+    await db.insert(product).values({
+      name: productName,
+      image_url: image_url,
+      deleted: 0
+    })
+
+
+    return c.redirect('/');
 
   });
 
